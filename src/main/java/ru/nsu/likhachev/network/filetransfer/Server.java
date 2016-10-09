@@ -42,33 +42,35 @@ public class Server implements ClientMessageListener {
     public void messageMetadata(CMessageFileMetadata msg, MessageHandler messageHandler) {
         try {
             File uploadsDir = new File("uploads");
-            this.fileIdToName.put(fileCounter, msg.getFilename());
-            if (!uploadsDir.exists() && !uploadsDir.mkdirs()) {
+            File file = new File(uploadsDir, msg.getFilename().replace(":", ""));
+
+            if (!file.getParentFile().exists() && !file.getParentFile().mkdirs()) {
                 System.out.println("Cannot create uploads dir");
-                messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter++, true, "Cannot create uploads dir", msg.getFilename()));
+                messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter, true, "Cannot create uploads dir", msg.getFilename()));
                 return;
             }
-            File file = new File("uploads/" + msg.getFilename());
+
+            this.fileIdToName.put(fileCounter, file.toString());
             if (file.exists()) {
-                System.out.println("File " + msg.getFilename() + " already exists");
-                messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter++, true, "File already exists", msg.getFilename()));
+                System.out.println("File " + file.toString() + " already exists");
+                messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter, true, "File already exists", msg.getFilename()));
                 return;
             }
-            try (RandomAccessFile raFile = new RandomAccessFile("uploads/" + msg.getFilename(), "rw")) {
+            try (RandomAccessFile raFile = new RandomAccessFile(file.toString(), "rw")) {
                 raFile.setLength(msg.getLength());
-                System.out.println("Created file " + msg.getFilename() + " of size " + msg.getLength());
+                System.out.println("Created file " + file.toString() + " of size " + msg.getLength());
                 messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter++, false, "OK", msg.getFilename()));
             }
         } catch (IOException e) {
             System.out.println("Cannot access file " + msg.getFilename());
-            messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter++, true, "Cannot access file", msg.getFilename()));
+            messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter, true, "Cannot access file", msg.getFilename()));
         }
     }
 
     @Override
     public void messageFileData(CMessageFileData msg, MessageHandler messageHandler) {
         try {
-            try (RandomAccessFile raFile = new RandomAccessFile("uploads/" + this.fileIdToName.get(msg.getFileId()), "rw")) {
+            try (RandomAccessFile raFile = new RandomAccessFile(this.fileIdToName.get(msg.getFileId()), "rw")) {
                 raFile.seek(msg.getIndex() * Constants.FILE_PIECE_SIZE);
                 raFile.write(msg.getData());
                 System.out.println("Write " + msg.getLen() + " of data by padding " + msg.getIndex() * Constants.FILE_PIECE_SIZE
