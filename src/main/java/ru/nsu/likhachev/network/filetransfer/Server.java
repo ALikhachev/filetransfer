@@ -126,17 +126,6 @@ public class Server implements ClientMessageListener {
         }
     }
 
-    private static String stringifySpeed(long bytes) {
-        if (bytes == 0) {
-            return "0 (or something too small)";
-        }
-        String[] units = {"bit", "kb", "Mb", "Gb", "Tb", "Pb"};
-        bytes *= 8;
-        int number = (int) Math.floor(Math.log(bytes) / Math.log(1024));
-
-        return new DecimalFormat("#.#").format(bytes / Math.pow(1024, Math.floor(number))) + ' ' + units[number] + "/s";
-    }
-
     public static void main(String args[]) {
         try {
             Server serv = new Server();
