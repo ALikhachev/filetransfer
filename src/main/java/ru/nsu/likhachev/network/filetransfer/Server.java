@@ -2,6 +2,7 @@ package ru.nsu.likhachev.network.filetransfer;
 
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileData;
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileMetadata;
+import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileOk;
 import ru.nsu.likhachev.network.filetransfer.messages.SMessageFileDataStatus;
 import ru.nsu.likhachev.network.filetransfer.messages.SMessageFileMetadataStatus;
 
@@ -9,6 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
+import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -92,6 +94,21 @@ public class Server implements ClientMessageListener {
         }
     }
 
+    @Override
+    public void messageFileOk(CMessageFileOk msg, MessageHandler messageHandler) {
+        try {
+            RandomAccessFile file = this.fileIdToFile.get(msg.getFileId());
+            if (file == null) {
+                return;
+            }
+            this.fileIdToFile.get(msg.getFileId()).close();
+            this.fileIdToFile.remove(msg.getFileId());
+            System.out.println("File " + msg.getFileId() + " closed");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public void listen() throws IOException {
         for (; ; ) {
             int selected = this.selector.select();
@@ -102,7 +119,6 @@ public class Server implements ClientMessageListener {
             while (selectedKeys.hasNext()) {
                 SelectionKey key = selectedKeys.next();
                 if (!key.isValid()) {
-                    key.channel().close();
                     key.cancel();
                 }
                 try {
@@ -112,17 +128,17 @@ public class Server implements ClientMessageListener {
                         clientChannel.configureBlocking(false);
                         clientChannel.register(this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE, new MessageHandler(this));
                     }
-                    if (key.isWritable()) {
-                        SocketChannel client = (SocketChannel) key.channel();
-                        MessageHandler handler = (MessageHandler) key.attachment();
-                        handler.write(client);
-                    }
                     if (key.isReadable()) {
                         SocketChannel client = (SocketChannel) key.channel();
                         MessageHandler handler = (MessageHandler) key.attachment();
                         handler.read(client);
                     }
-                } catch (ClosedChannelException ex) {
+                    if (key.isWritable()) {
+                        SocketChannel client = (SocketChannel) key.channel();
+                        MessageHandler handler = (MessageHandler) key.attachment();
+                        handler.write(client);
+                    }
+                } catch (ClosedChannelException | CancelledKeyException ex) {
                     System.err.println("Client disconnected");
                     if (key.attachment() instanceof MessageHandler) {
                         this.closeFiles((MessageHandler) key.attachment());
@@ -141,8 +157,16 @@ public class Server implements ClientMessageListener {
     }
 
     private void closeFiles(MessageHandler handler) throws IOException {
+        Set<Integer> set = this.handlerFiles.get(handler);
+        if (set == null) {
+            return;
+        }
         for (Integer i : this.handlerFiles.get(handler)) {
-            this.fileIdToFile.get(i).close();
+            RandomAccessFile file = this.fileIdToFile.get(i);
+            if (file != null) {
+                file.close();
+                System.out.println("File " + i + " closed");
+            }
         }
         this.handlerFiles.remove(handler);
     }

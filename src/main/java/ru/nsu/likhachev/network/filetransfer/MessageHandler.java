@@ -1,6 +1,7 @@
 package ru.nsu.likhachev.network.filetransfer;
 
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileData;
+import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileOk;
 import ru.nsu.likhachev.network.filetransfer.messages.ClientMessage;
 import ru.nsu.likhachev.network.filetransfer.messages.Message;
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileMetadata;
@@ -113,6 +114,7 @@ public class MessageHandler {
     static {
         CLIENT_MESSAGES.put((byte) 0, CMessageFileMetadata.class);
         CLIENT_MESSAGES.put((byte) 1, CMessageFileData.class);
+        CLIENT_MESSAGES.put((byte) 2, CMessageFileOk.class);
 
         SERVER_MESSAGES.put((byte) 0, SMessageFileMetadataStatus.class);
         SERVER_MESSAGES.put((byte) 1, SMessageFileDataStatus.class);

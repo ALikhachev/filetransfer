@@ -2,6 +2,7 @@ package ru.nsu.likhachev.network.filetransfer;
 
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileData;
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileMetadata;
+import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileOk;
 import ru.nsu.likhachev.network.filetransfer.messages.SMessageFileDataStatus;
 import ru.nsu.likhachev.network.filetransfer.messages.SMessageFileMetadataStatus;
 
@@ -62,6 +63,10 @@ public class Client implements ServerMessageListener {
                 totalRead += read;
             }
             this.packetHandler.queueMessage(new CMessageFileData(fileId, index, Arrays.copyOfRange(buf, 0, totalRead)));
+            if ((double) raFile.length() / (double) Constants.FILE_PIECE_SIZE - index < 1) {
+                System.out.println(index);
+                this.packetHandler.queueMessage(new CMessageFileOk(fileId));
+            }
         } catch (IOException e) {
             throw new RuntimeException("Cannot read file");
         }

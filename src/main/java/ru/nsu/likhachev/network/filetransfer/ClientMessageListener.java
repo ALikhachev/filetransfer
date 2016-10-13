@@ -2,6 +2,7 @@ package ru.nsu.likhachev.network.filetransfer;
 
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileData;
 import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileMetadata;
+import ru.nsu.likhachev.network.filetransfer.messages.CMessageFileOk;
 
 /**
  * Client-sent messages listener interface
@@ -24,4 +25,6 @@ public interface ClientMessageListener {
      * @param messageHandler user messages handler
      */
     void messageFileData(CMessageFileData msg, MessageHandler messageHandler);
+
+    void messageFileOk(CMessageFileOk cMessageFileOk, MessageHandler messageHandler);
 }
