@@ -17,7 +17,6 @@ Java NIO single-thread file transfer multi-user application TCP-based with messa
 4. Server responses with `SMessageFileDataStatus` for each piece
 
 ### There are some shortcomings in terms of performance with this implementation:
-* Server opens and closes file every time it receives a piece
 * Server uses blocking operations when saving file data
 
 ### Some other problems:

@@ -14,10 +14,11 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.text.DecimalFormat;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Copyright (c) 2016 Alexander Likhachev.
@@ -36,7 +37,8 @@ public class Server implements ClientMessageListener {
     }
 
     private static int fileCounter = 0;
-    private Map<Integer, String> fileIdToName = new HashMap<>();
+    private Map<Integer, RandomAccessFile> fileIdToFile = new HashMap<>();
+    private Map<MessageHandler, Set<Integer>> handlerFiles = new HashMap<>();
 
     @Override
     public void messageMetadata(CMessageFileMetadata msg, MessageHandler messageHandler) {
@@ -50,17 +52,22 @@ public class Server implements ClientMessageListener {
                 return;
             }
 
-            this.fileIdToName.put(fileCounter, file.toString());
             if (file.exists()) {
                 System.out.println("File " + file.toString() + " already exists");
                 messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter, true, "File already exists", msg.getFilename()));
                 return;
             }
-            try (RandomAccessFile raFile = new RandomAccessFile(file.toString(), "rw")) {
-                raFile.setLength(msg.getLength());
-                System.out.println("Created file " + file.toString() + " of size " + msg.getLength());
-                messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter++, false, "OK", msg.getFilename()));
+            RandomAccessFile raFile = new RandomAccessFile(file.toString(), "rw");
+            this.fileIdToFile.put(fileCounter, raFile);
+            Set<Integer> set = this.handlerFiles.get(messageHandler);
+            if (set == null) {
+                set = new HashSet<>();
+                this.handlerFiles.put(messageHandler, set);
             }
+            set.add(fileCounter);
+            raFile.setLength(msg.getLength());
+            System.out.println("Created file " + file.toString() + " of size " + msg.getLength());
+            messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter++, false, "OK", msg.getFilename()));
         } catch (IOException e) {
             System.out.println("Cannot access file " + msg.getFilename());
             messageHandler.queueMessage(new SMessageFileMetadataStatus(fileCounter, true, "Cannot access file", msg.getFilename()));
@@ -70,20 +77,23 @@ public class Server implements ClientMessageListener {
     @Override
     public void messageFileData(CMessageFileData msg, MessageHandler messageHandler) {
         try {
-            try (RandomAccessFile raFile = new RandomAccessFile(this.fileIdToName.get(msg.getFileId()), "rw")) {
-                raFile.seek(msg.getIndex() * Constants.FILE_PIECE_SIZE);
-                raFile.write(msg.getData());
-                System.out.println("Write " + msg.getLen() + " of data by padding " + msg.getIndex() * Constants.FILE_PIECE_SIZE
-                        + " (index " + msg.getIndex() + ")");
-                messageHandler.queueMessage(new SMessageFileDataStatus(msg.getFileId(), msg.getIndex(), false, "OK"));
+            RandomAccessFile raFile = this.fileIdToFile.get(msg.getFileId());
+            if (raFile == null) {
+                messageHandler.queueMessage(new SMessageFileDataStatus(msg.getFileId(), msg.getIndex(), true, "No such file"));
+                return;
             }
+            raFile.seek(msg.getIndex() * Constants.FILE_PIECE_SIZE);
+            raFile.write(msg.getData());
+            System.out.println("Write " + msg.getLen() + " of data by padding " + msg.getIndex() * Constants.FILE_PIECE_SIZE
+                    + " (index " + msg.getIndex() + ")");
+            messageHandler.queueMessage(new SMessageFileDataStatus(msg.getFileId(), msg.getIndex(), false, "OK"));
         } catch (IOException e) {
             messageHandler.queueMessage(new SMessageFileDataStatus(msg.getFileId(), msg.getIndex(), true, e.getMessage()));
         }
     }
 
     public void listen() throws IOException {
-        for(;;) {
+        for (; ; ) {
             int selected = this.selector.select();
             if (selected == 0) {
                 continue;
@@ -114,16 +124,27 @@ public class Server implements ClientMessageListener {
                     }
                 } catch (ClosedChannelException ex) {
                     System.err.println("Client disconnected");
+                    if (key.attachment() instanceof MessageHandler) {
+                        this.closeFiles((MessageHandler) key.attachment());
+                    }
                     key.cancel();
                 } catch (IOException ex) {
-                    ex.printStackTrace();
                     System.err.println("Lost connection with client");
+                    if (key.attachment() instanceof MessageHandler) {
+                        this.closeFiles((MessageHandler) key.attachment());
+                    }
                     key.cancel();
-                    key.channel().close();
                 }
                 selectedKeys.remove();
             }
         }
+    }
+
+    private void closeFiles(MessageHandler handler) throws IOException {
+        for (Integer i : this.handlerFiles.get(handler)) {
+            this.fileIdToFile.get(i).close();
+        }
+        this.handlerFiles.remove(handler);
     }
 
     public static void main(String args[]) {
